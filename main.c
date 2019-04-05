@@ -3,13 +3,14 @@
 
 #include "bb_cnt.h"
 #include "hc12_hal.h"
+#include "microwave.h"
 
 /*A counter is defined in cnt_test.c.  The counter definition includes
 (1) the variables for counter flag, counter current value, counter terminate value, and callback function, and
 (2) a counter structure that points to all the counter related variables and callback function.
 */
 
-#define FACTOR 30000
+#define FACTOR 1
 #define ON   0xFF
 #define OFF  0x00
 
@@ -23,7 +24,7 @@ unsigned int cmpVal;
 
 U8		counter_expired;   //stored in RAM
 U16     counter_value;
-U16		counter_terminate_value=30000;
+U16		counter_terminate_value=FACTOR;
 void 	counter_callback(void);
 
 Counter_Type 	counter =                   //stored in ROM
@@ -37,7 +38,6 @@ Counter_Type 	counter =                   //stored in ROM
 void initTimerIC(void); 
 void initTimerOC(void);
 
-interrupt void TIM0_CH4_ISR(void);
 interrupt void TIM1_CH4_ISR(void);
 
 
@@ -59,7 +59,6 @@ void main(void) {
       
       BB_Initialize_Counter(&counter);
       BB_Reset_Counter(&counter);
-      initTimerIC();
       initTimerOC();
       
       EnableInterrupts;
@@ -86,48 +85,10 @@ void counter_callback()  {
       }  
 }
 
-interrupt void TIM0_CH4_ISR(void)   //Vector 12
-{
-	/*This interrupt is used to calculate the time to flash the LEDs*/
-	long unsigned int i;
-	
-	if(edgeCount == 0)
-	{
-		/*set to capture on falling edges*/
-		TIM0_TCTL3 = 0x02;
-		
-		/*Store start time*/
-		start_time = (unsigned int)TIM0_TCNT; //word
-		edgeCount = 1;
-
-	}
-	else if(edgeCount == 1)
-	{
-		/*Store stop time*/
-		stop_time = (unsigned int)TIM0_TCNT;  //word
-		edgeCount = 2;
-		led_enable = 1;	
-		
-		/*calc time to turn on leds*/
-		period = (stop_time - start_time);
-		
-		/*Set the time to flash LEDs here*/
-		/*Set value to compare to*/
-		TIM1_TC4 = period;
-		
-	}
-
-	/*Clear timer interrupt flag*/
-	TIM0_TFLG1_C4F = 1;
-}
-
 interrupt void TIM1_CH4_ISR(void) //Vector 36
 {
 	/*Flash LEDs while enabled*/
-	if(led_enable)
-	{
-	//	LEDS = ~LEDS;
-	}
+    BB_Service_Counter(&counter); 
 	
 	/*Clear timer interrupt flag*/
 	TIM1_TFLG1_C4F = 1;		
@@ -142,7 +103,7 @@ void initTimerOC(void)
 	TIM1_TSCR1 = 0x80;
 	
 	/*Frequency of the prescalar*/
-	TIM1_TSCR2 = 0x07;
+	TIM1_TSCR2 = 0x06;
 	
 	/*Enable fast flag*/
 	//TIM1_TSCR1_TFFCA = 1;
@@ -154,26 +115,7 @@ void initTimerOC(void)
 	TIM1_TC4 = FACTOR;
 }
 
-void initTimerIC(void) 
-{
-	/*Enable timer 0 */
-	TIM0_TSCR1 = 0x80;
-	
-	/*Frequency of the prescalar*/
-	TIM0_TSCR2 = 0x07; 
-	
-	/*Select input capture for timer 0*/
-	TIM0_TIOS = 0x00;
-	
-	/*Capture on rising edges*/
-	TIM0_TCTL3 = 0x01;
-		
-	/*Enable fast flag*/
-	//TIM0_TSCR1_TFFCA = 1;
-	
-	/*Disable = 0. Enable=1. timer interrupt*/
-	TIM0_TIE_C4I = 1;	
-}
+
 
 
 
